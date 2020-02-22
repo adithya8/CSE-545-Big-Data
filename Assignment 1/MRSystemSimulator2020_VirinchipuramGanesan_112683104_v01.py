@@ -19,15 +19,15 @@
 ## for SBU's Big Data Analytics Course 
 ## Spring 2020
 ##
-## Student Name: KEY
-## Student ID: 
+## Student Name: Adithya, Virinchipuram Ganesan
+## Student ID: 112683104
 
 ##Data Science Imports: 
 import numpy as np
 from scipy import sparse
 import mmh3
 from random import random
-
+from string import ascii_lowercase
 
 ##IO, Process Imports: 
 import sys
@@ -76,10 +76,19 @@ class MapReduce:
 	#assign each kv pair to a reducer task
         if combiner:
             #do the reduce from here before passing to reduceTask
-
+            temp_dict = {}
+            for k,v in mapped_kvs:
+                try:
+                    temp_dict[k].extend([v])
+                except:
+                    temp_dict[k] = [v]
+            
             #<<COMPLETE>>
-            pass
+            for (k,v) in temp_dict.items():
+                namenode_m2r.append((self.partitionFunction(k), self.reduce(k, v)))
+                # think about tuple(v)
             #1. Setup value lists for reducers
+
             #<<COMPLETE>>            
 
             #2. call reduce, appending result to get passed to reduceTasks
@@ -95,6 +104,7 @@ class MapReduce:
 
         ##<<COMPLETE>>
         node_number = 0
+        node_number = mmh3.hash(str(k),signed=False)%self.num_reduce_tasks
         return node_number
 
 
@@ -106,7 +116,6 @@ class MapReduce:
                 vsPerK[k].append(v)
             except KeyError:
                 vsPerK[k] = [v]
-
 
         #call reducers on each key with a list of values
         #and append the result for each key to namenoe_fromR
@@ -134,6 +143,14 @@ class MapReduce:
         #      p = Process(target=self.mapTask, args=(chunk,namenode_m2r))
         #      p.start()  
         runningProcesses = []
+        chunk_size = int(np.ceil(len(data)/self.num_map_tasks))
+
+        for i in range(0, len(data), chunk_size):
+            end = min(len(data), i+chunk_size)
+            chunk = data[i : end]
+            p = Process(target=self.mapTask, args=(chunk,namenode_m2r, self.use_combiner))
+            p.start()
+            runningProcesses.append(p)            
         ## <<COMPLETE>>
 
 	#join map task running processes back
@@ -147,7 +164,12 @@ class MapReduce:
         #into a list of lists, where to_reduce_task[task_num] = [list of kv pairs]
         to_reduce_task = [[] for i in range(self.num_reduce_tasks)] 
         ## <<COMPLETE>>
-        
+        for i in range(len(namenode_m2r)):
+            try:
+                to_reduce_task[namenode_m2r[i][0]].append(namenode_m2r[i][1])
+            except:
+                print ("--->",namenode_m2r[i][0], self.num_reduce_tasks)
+
         #launch the reduce tasks as a new process for each. 
         runningProcesses = []
         for kvs in to_reduce_task:
@@ -199,16 +221,69 @@ class SetDifferenceMR(MapReduce):
             return None
 
 class MeanCharsMR(MapReduce): #[TODO]
+    
+    def formatVs(self, vs:list):
+        '''
+            Function to add a description to the numerical output for better understanding.
+            ADDED BY STUDENT.
+        '''
+
+        vs_desc = ['count_sum: ', 'count_sq_sum: ', 'n: ', 'mean: ', 'stddev: ']
+        for i in range(len(vs)):
+            if('float' in str(type(vs[i]))):
+                vs_desc[i] += "{:.3f}".format(vs[i])
+            else:
+                vs_desc[i] += str(vs[i])
+        return tuple(vs_desc)
+    
+    def deFormatVs(self, vs:list):
+        '''
+            Funcion to remove the description and extract the numbers for further computation. 
+            ADDED BY STUDENT.
+        '''
+
+        vs_nodesc = []
+        for i in range(len(vs)):
+            val = vs[i].split(':')[-1].strip()
+            if('.' in vs[i]):
+                vs_nodesc.append(float(val))
+            elif ('None' in val):
+                vs_nodesc.append(None)
+            else:
+                vs_nodesc.append(int(val))
+        
+        return tuple(vs_nodesc)
+
     def map(self, k, v):
-        pairs = None
+        pairs = []
+        letters = list(ascii_lowercase)
+        v = list(v.lower())        
+        for i in letters:
+            #pairs.append( (i, (v.count(i), v.count(i)*v.count(i), 1, None, None)) )
+            pairs.append( (i, self.formatVs([v.count(i), v.count(i)*v.count(i), 1, None, None])))
         #<<COMPLETE>>
         return pairs
         
     
     def reduce(self, k, vs):
-        value = None
+        value = 0
         #<<COMPLETE>>
-        return (k, value)
+        #To Code: Write script to add string output and add comments
+        count_sum = 0
+        count_sum_sq = 0
+        count = 0
+        for j in vs:
+            i = self.deFormatVs(j)
+            count_sum += i[0]
+            count_sum_sq += i[1]
+            count += i[2]
+
+        mean = count_sum/count if(count!=0) else None
+        #std = np.sqrt((count_sum_sq - (count_sum*count_sum/count))/count) if(count!=0) else None
+        std = np.sqrt((count_sum_sq/count - (mean*mean))) if(count!=0) else None
+        value = self.formatVs([count_sum, count_sum_sq, count, mean, std])
+        pair = (k, value)
+        return (pair)
 
 			
 			
@@ -227,7 +302,7 @@ if __name__ == "__main__": #[Uncomment peices to test]
     
     ###################
     ##run WordCount:
-    
+    #     
     print("\n\n*****************\n Word Count\n*****************\n")
     data = [(1, "The horse raced past the barn fell"),
             (2, "The complex houses married and single soldiers and their families"),
@@ -236,27 +311,27 @@ if __name__ == "__main__": #[Uncomment peices to test]
             (5, "Come what come may, time and the hour runs through the roughest day"),
             (6, "Be a yardstick of quality."),
             (7, "A horse is the projection of peoples' dreams about themselves - strong, powerful, beautiful")]
+    '''
     print("\nWord Count Basic WITHOUT Combiner:")
     mrObjectNoCombiner = WordCountBasicMR(data, 3, 3)
     mrObjectNoCombiner.runSystem()
     print("\nWord Count Basic WITH Combiner:")
     mrObjectWCombiner = WordCountBasicMR(data, 3, 3, use_combiner=True)
     mrObjectWCombiner.runSystem()
+    '''
     
-'''
     ###################
     ##MeanChars:
     print("\n\n*****************\n Word Count\n*****************\n")
     data.extend([(8, "I believe that at the end of the century the use of words and general educated opinion will have altered so much that one will be able to speak of machines thinking without expecting to be contradicted."),
                  (9, "The car raced past the finish line just in time."),
 	         (10, "Car engines purred and the tires burned.")])
+    '''
     print("\nMean Chars WITHOUT Combiner:")
     mrObjectNoCombiner = MeanCharsMR(data, 4, 3)
     mrObjectNoCombiner.runSystem()
+    '''
     print("\nMean Chars WITH Combiner:")
     mrObjectWCombiner = MeanCharsMR(data, 4, 3, use_combiner=True)
     mrObjectWCombiner.runSystem()
-      
-'''
 
-	
