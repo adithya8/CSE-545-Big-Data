@@ -311,14 +311,14 @@ if __name__ == "__main__": #[Uncomment peices to test]
             (5, "Come what come may, time and the hour runs through the roughest day"),
             (6, "Be a yardstick of quality."),
             (7, "A horse is the projection of peoples' dreams about themselves - strong, powerful, beautiful")]
-    '''
+    
     print("\nWord Count Basic WITHOUT Combiner:")
     mrObjectNoCombiner = WordCountBasicMR(data, 3, 3)
     mrObjectNoCombiner.runSystem()
     print("\nWord Count Basic WITH Combiner:")
     mrObjectWCombiner = WordCountBasicMR(data, 3, 3, use_combiner=True)
     mrObjectWCombiner.runSystem()
-    '''
+    
     
     ###################
     ##MeanChars:
@@ -326,11 +326,11 @@ if __name__ == "__main__": #[Uncomment peices to test]
     data.extend([(8, "I believe that at the end of the century the use of words and general educated opinion will have altered so much that one will be able to speak of machines thinking without expecting to be contradicted."),
                  (9, "The car raced past the finish line just in time."),
 	         (10, "Car engines purred and the tires burned.")])
-    '''
+    
     print("\nMean Chars WITHOUT Combiner:")
     mrObjectNoCombiner = MeanCharsMR(data, 4, 3)
     mrObjectNoCombiner.runSystem()
-    '''
+    
     print("\nMean Chars WITH Combiner:")
     mrObjectWCombiner = MeanCharsMR(data, 4, 3, use_combiner=True)
     mrObjectWCombiner.runSystem()
