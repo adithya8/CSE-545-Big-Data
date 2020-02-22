@@ -11,15 +11,12 @@
 ## for SBU's Big Data Analytics Course 
 ## Spring 2020
 ##
-## Student Name: KEY
-## Student ID: 
+## Student Name: Adithya, Virinchipuram Ganesan
+## Student ID: 112683104
 
 ##Data Science Imports: 
 import numpy as np
-import math
 import mmh3
-from random import random
-
 
 ##IO, Process Imports: 
 import sys
@@ -38,24 +35,19 @@ def typicalSampler(filename, percent = .01, sample_col = 0):
     # Step 3: read file again to pull out records from the 1% user_id and compute mean withdrawn
 
     ##<<START>>
-
-    #Turning Percentange into x out of y samples, for example, 0.005 would be 5 out of 1000 samples
-    percent_adjust_factor = math.pow(10,-math.floor((math.log10(5e-3))))
-    max_allowed_bin = int(percent_adjust_factor*percent)
+    
+    #Randomizing the users sampled.
+    np.random.seed(np.random.randint(0,1e5))
 
     mean, standard_deviation = 0.0, 0.0
     lines = filename.readlines()
     sampled_users = set()
-    start_time = timeit.default_timer()
     for i in lines:
         user_id = i.strip().split(',')[sample_col]
-        if(mmh3.hash(user_id, seed=42, signed=False)%percent_adjust_factor<max_allowed_bin):
-            sampled_users.add(user_id)
+        sampled_users.add(user_id)
     
-    sampling_time = timeit.default_timer() 
-    print ("Number of Sampled users: ", len(sampled_users))
-    print ("Finished sampling for ",max_allowed_bin/float(percent_adjust_factor)*100," percent in: ",sampling_time - start_time)
-    
+    sampled_users = np.random.choice(list(sampled_users), int(percent*len(sampled_users)), replace=False)
+
     x_sum = 0
     x_sq_sum = 0
     n = 0
@@ -72,12 +64,9 @@ def typicalSampler(filename, percent = .01, sample_col = 0):
             x_sq_sum += (x*x)
             n += 1
     
-    compute_time = timeit.default_timer()
-    print ("Finished computing mean and STD for the undersampled in ",compute_time - sampling_time,".")
     mean = x_sum/n
     standard_deviation = np.sqrt((x_sq_sum/n) - (mean*mean))
     ##<<COMPLETE>>
-
 
     return mean, standard_deviation
 
@@ -97,12 +86,11 @@ def streamSampler(stream, percent = .01, sample_col = 0):
     #   2) No other loops besides the while listed. 
     
     #Turning Percentange into x out of y samples, for example, 0.005 would be 5 out of 1000 samples
-    percent_adjust_factor = math.pow(10,-math.floor((math.log10(5e-3))))
+    percent_adjust_factor = np.power(10,-np.floor((np.log10(percent))))
     max_allowed_bin = int(percent_adjust_factor*percent)
 
+    seedv = np.random.randint(1,1e5)
     mean, standard_deviation = 0.0, 0.0
-    #sampled_users = set()
-    start_time = timeit.default_timer()
     x_sum = 0
     x_sq_sum = 0
     n = 0
@@ -110,18 +98,13 @@ def streamSampler(stream, percent = .01, sample_col = 0):
     for line in stream:
         data = line.strip().split(',')
         user_id = data[sample_col]
-        if(mmh3.hash(user_id, seed=42, signed=False)%percent_adjust_factor<max_allowed_bin):
-            #sampled_users.add(user_id)
+        if(mmh3.hash(user_id, seed= seedv, signed=False)%percent_adjust_factor<max_allowed_bin):
             x = float(data[-1])
             x_sum += x
             x_sq_sum += (x*x)
             n += 1
-            #mean = x_sum/n
-            #standard_deviation = np.sqrt((x_sq_sum/n) - (mean*mean))
         ##<<COMPLETE>>
     ##<<COMPLETE>>
-    compute_time = timeit.default_timer()
-    print ("Finished computing mean and STD for the undersampled in ",compute_time - start_time,".")
 
     mean = x_sum/n
     standard_deviation = np.sqrt((x_sq_sum/n) - (mean*mean))
@@ -142,14 +125,20 @@ if __name__ == "__main__":
     for perc in percents:
         print("\nPercentage: %.4f\n==================" % perc)
         for f in files:
-            if f == 'transactions_large.csv':
-                continue
+            if f == 'transactions_large.csv': #large file is located in a different location in my system
+                f = '/data/avirinchipur/'+f
             print("\nFile: ", f)
             fstream = open(f, "r")
+            start_time = timeit.default_timer()
             print("  Typical Sampler: ", typicalSampler(fstream, perc, 2))
+            compute_time = timeit.default_timer()
+            print ("Typical sampler completed in: ",'{:.3f}'.format(compute_time - start_time),".")
             fstream.close()
             fstream = open(f, "r")
+            start_time = timeit.default_timer()
             print("  Stream Sampler:  ", streamSampler(fstream, perc, 2))
+            compute_time = timeit.default_timer()
+            print ("Stream sampler completed in: ",'{:.3f}'.format(compute_time - start_time),".")
             
 
 

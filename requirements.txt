@@ -2,3 +2,4 @@ mmh3
 numpy
 pandas
 DateTime
+scipy
