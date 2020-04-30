@@ -1,5 +1,5 @@
 # author gh: @adithya8
-# To add: Handling div by zero in the cosine sim, add argv
+# To add: 
 ###################################
 import pyspark
 import numpy as np
@@ -13,6 +13,8 @@ from pprint import pprint
 min_reviewers = 25
 # Min products reviewed threshold
 min_products = 5 
+# Epsilon 
+e = 7./3 - 4./3 -1
 # Seed value for random split
 seed = 43
 # Product asins
@@ -37,17 +39,20 @@ sc = pyspark.SparkContext()
 txt = sc.textFile(file_path).map(lambda x: json.loads(x))
 #Filter out the records that don't have necessary fields; followed by creating key val pairs.
 txt = txt.filter(lambda x: (('reviewerID' in x) and ('overall' in x) and ('asin' in x) and ('unixReviewTime' in x))).map(lambda x: ((x['asin'], x['reviewerID']), (x['overall'], x['unixReviewTime'])) )
-#Getting the last review per user per product and forming a 'sparse' utility matrix. Format: (reviewerID, (asin, rating))
-txt = txt.reduceByKey(lambda x, y: x if(x[1]>y[1]) else y).map(lambda x: (x[0][1], (x[0][0], x[1][0])) )
-#Filtering out users with fewer than 10 unique reviews and turning data to: (asin, (reviewerID, rating))
+#Getting the last review per user per product and forming a 'sparse' utility matrix. Format: (asin, (reviewerID, rating))
+txt = txt.reduceByKey(lambda x, y: x if(x[1]>y[1]) else y).map(lambda x: (x[0][0], (x[0][1], x[1][0])) )
+#Filtering out products with fewer than 25 unique reviewrs and format to: (reviewerID, (asin, rating))
+txt = txt.groupByKey().filter(lambda x: len(x[1])>=min_reviewers).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in list(x[1])])
+#Filtering out users with fewer than 5 unique reviews and turning data to: (asin, (reviewerID, rating))
 txt = txt.groupByKey().filter(lambda x: len(x[1])>=min_products).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in list(x[1])])
-#Filtering out products with fewer than 25 unique reviewrs
-txt = txt.groupByKey().filter(lambda x: len(x[1])>=min_reviewers)
+#Format to: [(asin, [(reviewerID, rating)...]), (asin, [(reviewerID, rating)...])...] 
+txt = txt.groupByKey()
 #Apply mean centering and turning data to: (reviewerID, (asin, rating))
 txt_processed = txt.map(applyMeanCentering).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in list(x[1])])
 
 #all_reviewers = list(np.unique(txt_processed.keys().collect()))
 countOfTxt = txt.count()
+
 '''
 if countOfTxt<1000:
     #Broadcast
@@ -63,8 +68,8 @@ sim_search = sim_search.map(lambda x: ((x[1][0][0], x[1][1][0]), (x[1][0][1], x[
 #Changing to Commutative + Associative format for faster cmputation. Format: ((asin1, asin2), (rating1*rating2, rating1^2, rating2^2, 1))
 sim_search = sim_search.map(lambda x: (x[0], (x[1][0]*x[1][1], x[1][0]**2, x[1][1]**2, 1)) )
 #Computing the similarity fo items and dropping items that had fewer than 2 reviewers in common
-sim_search = sim_search.reduceByKey(lambda x,y: (x[0]+y[0], x[1]+y[1], x[2]+y[2], x[3]+y[3])).filter(lambda x: x[1][3]>=2).map(lambda x: (x[0], x[1][0]/(np.sqrt(x[1][1])*np.sqrt(x[1][2])), x[1][3]) )
-#Filtering out negative similarities
+sim_search = sim_search.reduceByKey(lambda x,y: (x[0]+y[0], x[1]+y[1], x[2]+y[2], x[3]+y[3])).filter(lambda x: x[1][3]>=2).map(lambda x: (x[0], x[1][0]/(np.sqrt(x[1][1]+e)*np.sqrt(x[1][2]+e)), x[1][3]) )
+#Filtering positive similarities
 sim_search = sim_search.filter(lambda x: x[1]>0)
 #Ordering based on decreasing similarity and decreasing number of reviewers in common. Finally making to easy to group by the asin(s) we wanted neighbours for.
 sim_search  = sim_search.sortBy(lambda x: (-x[1], -x[2])).map(lambda x: (x[0][0], (x[0][1], x[1], x[2])) if x[0][0] in product_asins else (x[0][1], (x[0][0], x[1], x[2])))
@@ -80,7 +85,12 @@ cf = cf.reduceByKey(lambda x,y: (x[0]+y[0], x[1]+y[1], x[2]+y[2])).filter(lambda
 
 #Removing the ratings that already existed.
 cf = cf.filter(lambda x: x[0] not in product_asins_ratings_static)
+#Combining the new computed ratings with the existing ratings,
+cf = cf.map(lambda x: (x[0], int(x[1]*1000)/1000.0)).union(txt.filter(lambda x: x[0] in product_asins).flatMap(lambda x: [((x[0], i[0]), i[1]) for i in list(x[1])] ))
+#Sorting based on alphabetical order of products, followed by reviewerIDs, followed by decreasing order of ratings
+cf = cf.sortBy(lambda x: (x[0], -x[1]))
+#collecting end result
+cf = cf.collect()
 
 
-#pprint ((product_asins_ratings.collect()))
-pprint (cf.sortBy(lambda x: x[1]).collect())
+pprint (cf)
