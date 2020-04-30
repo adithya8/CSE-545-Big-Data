@@ -16,7 +16,9 @@ min_products = 5
 # Seed value for random split
 seed = 43
 # Product asins
-product_asins = ['B00EZPXYP4', 'B00CTTEKJW']
+product_asins = ['B00EZPXYP4', 'B00CTTEKJW'] if len(sys.argv)<3 else eval(sys.argv[2])
+# Input File path
+file_path = 'Data/Software_5.json' if len(sys.argv)<2 else sys.argv[1]
 ###################################
 
 def applyMeanCentering(x):
@@ -29,16 +31,10 @@ def applyMeanCentering(x):
     meanCentered = [(i[0], i[1] - meanRating) for i in x[1]]
     return (x[0], meanCentered)
 
-def OrderSimilaritems(x):
-    if x[0][0] in product_asins:
-        return ()
-
-    return 
-
 ###################################
 sc = pyspark.SparkContext()
 #Read the file and turn it to dictionary
-txt = sc.textFile('Data/Software_5.json').map(lambda x: json.loads(x))
+txt = sc.textFile(file_path).map(lambda x: json.loads(x))
 #Filter out the records that don't have necessary fields; followed by creating key val pairs.
 txt = txt.filter(lambda x: (('reviewerID' in x) and ('overall' in x) and ('asin' in x) and ('unixReviewTime' in x))).map(lambda x: ((x['asin'], x['reviewerID']), (x['overall'], x['unixReviewTime'])) )
 #Getting the last review per user per product and forming a 'sparse' utility matrix. Format: (reviewerID, (asin, rating))
@@ -51,7 +47,6 @@ txt = txt.groupByKey().filter(lambda x: len(x[1])>=min_reviewers)
 txt_processed = txt.map(applyMeanCentering).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in list(x[1])])
 
 #all_reviewers = list(np.unique(txt_processed.keys().collect()))
-pprint (txt_processed.take(5))
 countOfTxt = txt.count()
 '''
 if countOfTxt<1000:
@@ -88,4 +83,4 @@ cf = cf.filter(lambda x: x[0] not in product_asins_ratings_static)
 
 
 #pprint ((product_asins_ratings.collect()))
-#pprint (cf.sortBy(lambda x: x[0]).collect())
+pprint (cf.sortBy(lambda x: x[1]).collect())
