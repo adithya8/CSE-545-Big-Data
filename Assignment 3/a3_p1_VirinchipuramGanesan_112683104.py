@@ -3,22 +3,19 @@
 
 ###################################
 import pyspark
-from sklearn import linear_model
 from scipy import stats
 import numpy as np
 
 import json
 import re
 import sys
-#Check out if Counter is ok 
-from collections import Counter
 from pprint import pprint
 
 ###################################
 # Regex match for pattern
 re_pattern =  r'((?:[\.,!?;"])|(?:(?:\#|\@)?[A-Za-z0-9_\-]+(?:\'[a-z]{1,3})?))'
 # Top n common words
-n_words = 100
+n_words = 1000
 # Epsilon 
 e = 7./3 - 4./3 -1
 # Seed value for random split
@@ -72,7 +69,8 @@ txt = txt.flatMap(lambda x: ((x[0], (re.findall(re_pattern, x[1]), x[2])),) ).fi
 
 #Let's run a word count....
 common_words = txt.flatMap(lambda x: list(map(lambda y: (y,1),  x[1][0])))
-common_words = sc.broadcast(common_words.reduceByKey(lambda a, b: a+b).sortBy(lambda x: -x[1]).keys().take(n_words))
+common_words = common_words.reduceByKey(lambda a, b: a+b)
+common_words = sc.broadcast(list(map(lambda y: y[0], common_words.takeOrdered(n_words, lambda x: -x[1]))))
 
 #Format: (word, ([rating], [relFreq], [VERIFIED]))
 txt = txt.flatMap(lambda x: [(i, ([x[0]], [x[1][0].count(i)/len(set(x[1][0]))], [x[1][1]])) for i in common_words.value])
