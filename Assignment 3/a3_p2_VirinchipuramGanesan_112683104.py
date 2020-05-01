@@ -54,6 +54,7 @@ txt_processed = txt.flatMap(applyMeanCentering).flatMap(lambda x: [(i[0], (x[0],
 #all_reviewers = list(np.unique(txt_processed.keys().collect()))
 countOfTxt = txt.count()
 print (countOfTxt)
+
 '''
 if countOfTxt<1000:
     #Broadcast
