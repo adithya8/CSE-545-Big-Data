@@ -31,24 +31,25 @@ def applyMeanCentering(x):
         meanRating += i[1]
     meanRating = meanRating/len(x[1])
     meanCentered = [(i[0], i[1] - meanRating) for i in x[1]]
-    return (x[0], meanCentered)
+    return [(x[0], meanCentered)]
 
 ###################################
 sc = pyspark.SparkContext()
 #Read the file and turn it to dictionary
-txt = sc.textFile(file_path).map(lambda x: json.loads(x))
+txt = sc.textFile(file_path).flatMap(lambda x: (json.loads(x),) )
 #Filter out the records that don't have necessary fields; followed by creating key val pairs.
-txt = txt.filter(lambda x: (('reviewerID' in x) and ('overall' in x) and ('asin' in x) and ('unixReviewTime' in x))).map(lambda x: ((x['asin'], x['reviewerID']), (x['overall'], x['unixReviewTime'])) )
+txt = txt.filter(lambda x: (('reviewerID' in x) and ('overall' in x) and ('asin' in x) and ('unixReviewTime' in x))).flatMap(lambda x: (((x['asin'], x['reviewerID']), (x['overall'], x['unixReviewTime'])), ) )
+#txt = txt.filter(lambda x: (('reviewerID' in x) and ('overall' in x) and ('asin' in x) and ('unixReviewTime' in x))).map(lambda x: ((x['asin'], x['reviewerID']), (x['overall'], x['unixReviewTime'])) )
 #Getting the last review per user per product and forming a 'sparse' utility matrix. Format: (asin, (reviewerID, rating))
-txt = txt.reduceByKey(lambda x, y: x if(x[1]>y[1]) else y).map(lambda x: (x[0][0], (x[0][1], x[1][0])) )
+txt = txt.reduceByKey(lambda x, y: x if(x[1]>y[1]) else y).flatMap(lambda x: ((x[0][0], (x[0][1], x[1][0])),) )
 #Filtering out products with fewer than 25 unique reviewrs and format to: (reviewerID, (asin, rating))
-txt = txt.groupByKey().filter(lambda x: len(x[1])>=min_reviewers).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in list(x[1])])
+txt = txt.groupByKey().filter(lambda x: len(x[1])>=min_reviewers).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in list(x[1])] )
 #Filtering out users with fewer than 5 unique reviews and turning data to: (asin, (reviewerID, rating))
-txt = txt.groupByKey().filter(lambda x: len(x[1])>=min_products).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in list(x[1])])
+txt = txt.groupByKey().filter(lambda x: len(x[1])>=min_products).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in list(x[1])] )
 #Format to: [(asin, [(reviewerID, rating)...]), (asin, [(reviewerID, rating)...])...] 
 txt = txt.groupByKey()
 #Apply mean centering and turning data to: (reviewerID, (asin, rating))
-txt_processed = txt.map(applyMeanCentering).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in list(x[1])])
+txt_processed = txt.flatMap(applyMeanCentering).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in list(x[1])])
 
 #all_reviewers = list(np.unique(txt_processed.keys().collect()))
 countOfTxt = txt.count()
