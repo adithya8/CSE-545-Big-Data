@@ -20,6 +20,8 @@ n_words = 1000
 e = 7./3 - 4./3 -1
 # Seed value for random split
 seed = 43
+# file_path
+input_file = 'Data/Software_5.json' if len(sys.argv)<2 else sys.argv[1]
 ###################################
 
 def prepareDist(x, y):
@@ -61,7 +63,7 @@ def doTest(x):
 
 sc = pyspark.SparkContext()
 #Read the file and turn it to dictionary
-txt = sc.textFile('Data/Software_5.json').flatMap(lambda x: (json.loads(x),))
+txt = sc.textFile(input_file).flatMap(lambda x: (json.loads(x),))
 #Filter out the records that don't have reviewText and ratings;followed create such records.
 txt = txt.filter(lambda x: (('reviewText' in x) and ('overall' in x) and ('verified' in x))).flatMap(lambda x: ((x['overall'], x['reviewText'].lower(), x['verified']),) )
 #Change the reviewText to list of words based on regex pattern match, and filtering the corner case
