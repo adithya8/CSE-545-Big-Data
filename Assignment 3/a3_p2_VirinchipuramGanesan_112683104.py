@@ -41,11 +41,11 @@ txt = sc.textFile(file_path).flatMap(lambda x: (json.loads(x),) )
 txt = txt.filter(lambda x: (('reviewerID' in x) and ('overall' in x) and ('asin' in x) and ('unixReviewTime' in x))).flatMap(lambda x: (((x['asin'], x['reviewerID']), (x['overall'], x['unixReviewTime'])), ) )
 #txt = txt.filter(lambda x: (('reviewerID' in x) and ('overall' in x) and ('asin' in x) and ('unixReviewTime' in x))).map(lambda x: ((x['asin'], x['reviewerID']), (x['overall'], x['unixReviewTime'])) )
 #Getting the last review per user per product and forming a 'sparse' utility matrix. Format: (asin, (reviewerID, rating))
-txt = txt.reduceByKey(lambda x, y: x if(x[1]>y[1]) else y).flatMap(lambda x: ((x[0][0], (x[0][1], x[1][0])),) )
+txt = txt.reduceByKey(lambda x, y: x if(x[1]>y[1]) else y).flatMap(lambda x: ((x[0][0], (x[0][1], x[1][0])),))
 #Filtering out products with fewer than 25 unique reviewrs and format to: (reviewerID, (asin, rating))
 txt = txt.groupByKey().filter(lambda x: len(x[1])>=min_reviewers).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in list(x[1])] )
 #Filtering out users with fewer than 5 unique reviews and turning data to: (asin, (reviewerID, rating))
-txt = txt.groupByKey().filter(lambda x: len(x[1])>=min_products).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in list(x[1])] )
+txt = txt.groupByKey().filter(lambda x: len(x[1])>=min_products).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in list(x[1])])
 #Format to: [(asin, [(reviewerID, rating)...]), (asin, [(reviewerID, rating)...])...] 
 txt = txt.groupByKey()
 #Apply mean centering and turning data to: (reviewerID, (asin, rating))
@@ -53,7 +53,7 @@ txt_processed = txt.flatMap(applyMeanCentering).flatMap(lambda x: [(i[0], (x[0],
 
 #all_reviewers = list(np.unique(txt_processed.keys().collect()))
 countOfTxt = txt.count()
-
+print (countOfTxt)
 '''
 if countOfTxt<1000:
     #Broadcast
@@ -91,7 +91,8 @@ cf = cf.map(lambda x: (x[0], int(x[1]*1000)/1000.0)).union(txt.filter(lambda x: 
 #Sorting based on alphabetical order of products, followed by reviewerIDs, followed by decreasing order of ratings
 cf = cf.sortBy(lambda x: (x[0], -x[1]))
 #collecting end result
-cf = cf.collect()
+#cf = cf.collect()
 
-
-pprint (cf)
+cf.coalesce(1).saveAsTextFile('hdfs:///Output.txt')
+#pprint (cf)
+sc.stop()
