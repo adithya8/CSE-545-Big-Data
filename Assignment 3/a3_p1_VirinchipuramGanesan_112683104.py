@@ -15,7 +15,7 @@ from pprint import pprint
 # Regex match for pattern
 re_pattern =  r'((?:[\.,!?;"])|(?:(?:\#|\@)?[A-Za-z0-9_\-]+(?:\'[a-z]{1,3})?))'
 # Top n common words
-n_words = 1000
+n_words = 100
 # Epsilon 
 e = 7./3 - 4./3 -1
 # Seed value for random split
@@ -38,25 +38,25 @@ def doTest(x):
     def zScore(x):
         return (x - np.mean(x, axis=0))/(np.std(x, axis=0)+e)
     def performTest(x, y):
-        x = np.concatenate((x, np.ones((x.shape[0],1)) ), axis=1)
+        #x = np.concatenate((x, np.ones((x.shape[0],1)) ), axis=1)
         beta = np.dot(np.dot(np.linalg.inv(np.dot(x.T,x)),x.T),y)
         y_pred = np.dot(x, beta)
         sse = np.sum((y_pred - y) ** 2, axis=0) / float(x.shape[0] - x.shape[1] - 1)
-        se = np.array([np.sqrt(sse/(np.sum((x[:, i] - np.mean(x[:, i]))**2)+e) ) for i in range(x.shape[1]) ])
+        se = np.sqrt(sse/(np.sum((x[:, 0] - np.mean(x[:, 0]))**2)+e) ) 
         t = beta / se
-        p = 2 * (1 - stats.t.cdf(np.abs(t), x.shape[0] - x.shape[1] - 1))
-        return p[:, -1]
+        p = stats.t.cdf(t, x.shape[0] - x.shape[1] - 1)*1e3 if(beta[0]<0) else (1 - stats.t.cdf(t, x.shape[0] - x.shape[1] - 1))*1e3
+        return p
     #Reference from https://gist.github.com/brentp/5355925 and slides
     x_ = np.array(x[1])
-    ratings = x_[:,0].reshape(-1,1)
-    relFreq = x_[:,1].reshape(-1,1)
-    verify = x_[:,2].reshape(-1,1)
+    ratings = zScore(x_[:,0].reshape(-1,1))
+    relFreq = zScore(x_[:,1].reshape(-1,1))
+    verify = zScore(x_[:,2].reshape(-1,1))
     #Transform to Normal(0,1)
     #ratings, relFreq, verify = zScore(ratings), zScore(relFreq), zScore(verify)
     relFreq_ver = np.concatenate((relFreq, verify), axis=1)
+    r = np.corrcoef(relFreq.reshape(-1,), ratings.reshape(-1,))[0,1]
     p_uni = performTest(relFreq, ratings)[0]
     p_multi = performTest(relFreq_ver, ratings)[0]
-    r = np.corrcoef(relFreq.reshape(-1,), ratings.reshape(-1,))[0,1]
     return tuple([x[0], (p_uni, p_multi, r)])
 
 ###################################
@@ -80,20 +80,22 @@ txt = txt.flatMap(lambda x: tuple([(i, (x[0], x[1][0].count(i)/len(set(x[1][0]))
 txt = txt.groupByKey().map(lambda x: (x[0], list(x[1])))
 txt = txt.map(doTest)
 
+positive_corr = txt.filter(lambda x: x[1][2]>0)
+negative_corr = txt.filter(lambda x: x[1][2]<0)
 #without_controls = txt.takeOrdered(20, lambda x: (x[1][0], x[1][2]))
 #with_controls = txt.takeOrdered(20, lambda x: (x[1][1], x[1][2]))
 
 pprint ('Without Controls: +ve')
-pprint (txt.filter(lambda x: x[1][2]>0).takeOrdered(20, lambda x: (x[1][0], -x[1][2])))
+pprint (positive_corr.takeOrdered(20, lambda x: (-x[1][2], x[1][0])))
 pprint ('----------------------')
 pprint ('Without Controls: -ve')
-pprint (txt.filter(lambda x: x[1][2]<0).takeOrdered(20, lambda x: (x[1][0], x[1][2])))
+pprint (negative_corr.takeOrdered(20, lambda x: (x[1][2], x[1][0])))
 pprint ('----------------------')
 pprint ('----------------------')
 pprint ('With Controls: +ve')
-pprint (txt.filter(lambda x: x[1][2]>0).takeOrdered(20, lambda x: (x[1][0], -x[1][2])))
+pprint (positive_corr.takeOrdered(20, lambda x: (-x[1][2], x[1][1])))
 pprint ('----------------------')
 pprint ('With Controls: -ve')
-pprint (txt.filter(lambda x: x[1][2]<0).takeOrdered(20, lambda x: (x[1][0], x[1][2])))
+pprint (negative_corr.takeOrdered(20, lambda x: (x[1][2], x[1][1])))
 
 sc.stop()
