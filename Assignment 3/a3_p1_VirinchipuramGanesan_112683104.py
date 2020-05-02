@@ -15,7 +15,7 @@ from pprint import pprint
 # Regex match for pattern
 re_pattern =  r'((?:[\.,!?;"])|(?:(?:\#|\@)?[A-Za-z0-9_\-]+(?:\'[a-z]{1,3})?))'
 # Top n common words
-n_words = 1000
+n_words = 100
 # Epsilon 
 e = 7./3 - 4./3 -1
 # Seed value for random split
@@ -57,7 +57,7 @@ def doTest(x):
     r = np.corrcoef(relFreq.reshape(-1,), ratings.reshape(-1,))[0,1]
     p_uni = performTest(relFreq, ratings)[0]
     p_multi = performTest(relFreq_ver, ratings)[0]
-    return tuple([x[0], (p_uni, p_multi, r)])
+    return tuple([x[0], (p_uni[0], p_multi[0], r)])
 
 ###################################
 
@@ -88,16 +88,16 @@ negative_corr = txt.filter(lambda x: x[1][2]<0)
 #with_controls = txt.takeOrdered(20, lambda x: (x[1][1], x[1][2]))
 
 pprint ('Without Controls: +ve')
-pprint (positive_corr.takeOrdered(20, lambda x: (-x[1][2], x[1][0])))
+pprint (positive_corr.map(lambda x: (x[0], ('p', x[1][0]), ('r', x[1][2]))).takeOrdered(20, lambda x: (-x[2][1], x[1][1])))
 pprint ('----------------------')
 pprint ('Without Controls: -ve')
-pprint (negative_corr.takeOrdered(20, lambda x: (x[1][2], x[1][0])))
+pprint (negative_corr.map(lambda x: (x[0], ('p', x[1][0]), ('r', x[1][2]))).takeOrdered(20, lambda x: (x[2][1], x[1][1])))
 pprint ('----------------------')
 pprint ('----------------------')
 pprint ('With Controls: +ve')
-pprint (positive_corr.takeOrdered(20, lambda x: (-x[1][2], x[1][1])))
+pprint (positive_corr.map(lambda x: (x[0], ('p', x[1][1]), ('r', x[1][2]))).takeOrdered(20, lambda x: (-x[2][1], x[1][1])))
 pprint ('----------------------')
 pprint ('With Controls: -ve')
-pprint (negative_corr.takeOrdered(20, lambda x: (x[1][2], x[1][1])))
+pprint (negative_corr.map(lambda x: (x[0], ('p', x[1][1]), ('r', x[1][2]))).takeOrdered(20, lambda x: (x[2][1], x[1][1])))
 
 sc.stop()
