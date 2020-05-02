@@ -61,7 +61,7 @@ txt_processed = txt.flatMap(applyMeanCentering).flatMap(lambda x: [(i[0], (x[0],
 
 #Extracting the products we want to find neighbors for
 product_asins_ratings = txt_processed.filter(lambda x: x[1][0] in product_asins.value)
-product_asins_ratings_static = product_asins_ratings.map(lambda x: (x[1][0], x[0])).collect()
+product_asins_ratings_static = sc.broadcast(product_asins_ratings.map(lambda x: (x[1][0], x[0])).collect())
 #Applying join based on reviewers to perform cosine similarity and then removing unwanted joins; We will need Utility matrix later
 sim_search = txt_processed.join(product_asins_ratings).filter(lambda x: x[1][0][0] != x[1][1][0])
 #Format to: ((asin1, asin2), (rating1, rating2))
@@ -85,7 +85,7 @@ cf = cf.map(lambda x: ((x[1][1][0], x[1][0][0]), (x[1][1][1]*x[1][0][1], x[1][1]
 cf = cf.reduceByKey(lambda x,y: (x[0]+y[0], x[1]+y[1], x[2]+y[2])).filter(lambda x: x[1][2]>=2).map(lambda x: (x[0], x[1][0]/x[1][1]))
 
 #Removing the ratings that already existed.
-cf = cf.filter(lambda x: x[0] not in product_asins_ratings_static)
+cf = cf.filter(lambda x: x[0] not in product_asins_ratings_static.value)
 #Combining the new computed ratings with the existing ratings,
 cf = cf.map(lambda x: (x[0], int(x[1]*1000)/1000.0)).union(txt.filter(lambda x: x[0] in product_asins.value).flatMap(lambda x: [((x[0], i[0]), i[1]) for i in list(x[1])] ))
 #Sorting based on alphabetical order of products, followed by reviewerIDs, followed by decreasing order of ratings
