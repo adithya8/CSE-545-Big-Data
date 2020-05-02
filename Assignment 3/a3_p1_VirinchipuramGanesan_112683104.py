@@ -15,7 +15,7 @@ from pprint import pprint
 # Regex match for pattern
 re_pattern =  r'((?:[\.,!?;"])|(?:(?:\#|\@)?[A-Za-z0-9_\-]+(?:\'[a-z]{1,3})?))'
 # Top n common words
-n_words = 100
+n_words = 1000
 # Epsilon 
 e = 7./3 - 4./3 -1
 # Seed value for random split
@@ -36,13 +36,13 @@ def prepareDist(x, y):
 
 def doTest(x):
     def zScore(x):
-        return (x - np.mean(x, axis=0))/(np.std(x, axis=0)+e)
+        return (x - np.mean(x, axis=0))/(np.std(x, axis=0))
     def performTest(x, y):
         #x = np.concatenate((x, np.ones((x.shape[0],1)) ), axis=1)
         beta = np.dot(np.dot(np.linalg.inv(np.dot(x.T,x)),x.T),y)
         y_pred = np.dot(x, beta)
         sse = np.sum((y_pred - y) ** 2, axis=0) / float(x.shape[0] - x.shape[1] - 1)
-        se = np.sqrt(sse/(np.sum((x[:, 0] - np.mean(x[:, 0]))**2)+e) ) 
+        se = np.sqrt(sse/(np.sum((x[:, 0] - np.mean(x[:, 0]))**2)) ) 
         t = beta / se
         p = stats.t.cdf(t, x.shape[0] - x.shape[1] - 1)*1e3 if(beta[0]<0) else (1 - stats.t.cdf(t, x.shape[0] - x.shape[1] - 1))*1e3
         return p
@@ -76,8 +76,10 @@ common_words = sc.broadcast(tuple(map(lambda y: y[0], common_words.takeOrdered(n
 
 #Format: (word, (rating, relFreq, VERIFIED))
 txt = txt.flatMap(lambda x: tuple([(i, (x[0], x[1][0].count(i)/len(set(x[1][0])), x[1][1])) for i in common_words.value]))
+
 #Format: (word, [(ratings, relFreq, VERIFIED) ...])
-txt = txt.groupByKey().map(lambda x: (x[0], list(x[1])))
+txt = txt.groupByKey().map(lambda x: (x[0], tuple(x[1])))
+
 txt = txt.map(doTest)
 
 positive_corr = txt.filter(lambda x: x[1][2]>0)
