@@ -1,5 +1,5 @@
 # author gh: @adithya8
-# To add: 
+# To add: None
 ###################################
 import pyspark
 import numpy as np
@@ -9,18 +9,23 @@ import sys
 from pprint import pprint
 
 ###################################
+# Enter condition
+if len(sys.argv)<3:
+    print ('Enter all arguments....')
+    sys.exit(0)
+
+###################################
 # Min reviewers threshold
 min_reviewers = 25
 # Min products reviewed threshold
 min_products = 5 
 # Epsilon 
 e = 7./3 - 4./3 -1
-# Seed value for random split
-seed = 43
 # Product asins
-product_asins = ['B00EZPXYP4', 'B00CTTEKJW'] if len(sys.argv)<3 else eval(sys.argv[2])
+product_asins = eval(sys.argv[2])
 # Input File path
-file_path = 'Data/Software_5.json' if len(sys.argv)<2 else sys.argv[1]
+file_path = sys.argv[1]
+
 ###################################
 
 def applyMeanCentering(x):
@@ -35,6 +40,8 @@ def applyMeanCentering(x):
 
 ###################################
 sc = pyspark.SparkContext()
+#Broadcasting product_asins
+product_asins = sc.broadcast(product_asins)
 #Read the file and turn it to dictionary
 txt = sc.textFile(file_path).flatMap(lambda x: (json.loads(x),) )
 #Filter out the records that don't have necessary fields; followed by creating key val pairs.
@@ -51,17 +58,9 @@ txt = txt.groupByKey()
 #Apply mean centering and turning data to: (reviewerID, (asin, rating))
 txt_processed = txt.flatMap(applyMeanCentering).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in list(x[1])])
 
-#all_reviewers = list(np.unique(txt_processed.keys().collect()))
-countOfTxt = txt.count()
-print (countOfTxt)
 
-'''
-if countOfTxt<1000:
-    #Broadcast
-    txt = sc.broadcast(txt)
-'''
 #Extracting the products we want to find neighbors for
-product_asins_ratings = txt_processed.filter(lambda x: x[1][0] in product_asins)
+product_asins_ratings = txt_processed.filter(lambda x: x[1][0] in product_asins.value)
 product_asins_ratings_static = product_asins_ratings.map(lambda x: (x[1][0], x[0])).collect()
 #Applying join based on reviewers to perform cosine similarity and then removing unwanted joins; We will need Utility matrix later
 sim_search = txt_processed.join(product_asins_ratings).filter(lambda x: x[1][0][0] != x[1][1][0])
@@ -74,7 +73,7 @@ sim_search = sim_search.reduceByKey(lambda x,y: (x[0]+y[0], x[1]+y[1], x[2]+y[2]
 #Filtering positive similarities
 sim_search = sim_search.filter(lambda x: x[1]>0)
 #Ordering based on decreasing similarity and decreasing number of reviewers in common. Finally making to easy to group by the asin(s) we wanted neighbours for.
-sim_search  = sim_search.sortBy(lambda x: (-x[1], -x[2])).map(lambda x: (x[0][0], (x[0][1], x[1], x[2])) if x[0][0] in product_asins else (x[0][1], (x[0][0], x[1], x[2])))
+sim_search  = sim_search.sortBy(lambda x: (-x[1], -x[2])).map(lambda x: (x[0][0], (x[0][1], x[1], x[2])) if x[0][0] in product_asins.value else (x[0][1], (x[0][0], x[1], x[2])))
 #Limit neighbors to 50 or less and format to: [(asin2, asin1, sim)....]. asin1 -> asin in the product_asins
 sim_search = sim_search.groupByKey().map(lambda x: (x[0], list(x[1])[:50])).flatMap(lambda x: [(i[0], (x[0], i[1])) for i in x[1]])
 
@@ -88,12 +87,14 @@ cf = cf.reduceByKey(lambda x,y: (x[0]+y[0], x[1]+y[1], x[2]+y[2])).filter(lambda
 #Removing the ratings that already existed.
 cf = cf.filter(lambda x: x[0] not in product_asins_ratings_static)
 #Combining the new computed ratings with the existing ratings,
-cf = cf.map(lambda x: (x[0], int(x[1]*1000)/1000.0)).union(txt.filter(lambda x: x[0] in product_asins).flatMap(lambda x: [((x[0], i[0]), i[1]) for i in list(x[1])] ))
+cf = cf.map(lambda x: (x[0], int(x[1]*1000)/1000.0)).union(txt.filter(lambda x: x[0] in product_asins.value).flatMap(lambda x: [((x[0], i[0]), i[1]) for i in list(x[1])] ))
 #Sorting based on alphabetical order of products, followed by reviewerIDs, followed by decreasing order of ratings
 cf = cf.sortBy(lambda x: (x[0], -x[1]))
-#collecting end result
-#cf = cf.collect()
 
-cf.coalesce(1).saveAsTextFile('hdfs:///Output.txt')
-#pprint (cf)
+###################################
+#collecting end result
+pprint (cf.collect())
+#cf.coalesce(1).saveAsTextFile('hdfs:///Output.txt')
+
+###################################
 sc.stop()
