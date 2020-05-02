@@ -15,7 +15,7 @@ from pprint import pprint
 # Regex match for pattern
 re_pattern =  r'((?:[\.,!?;"])|(?:(?:\#|\@)?[A-Za-z0-9_\-]+(?:\'[a-z]{1,3})?))'
 # Top n common words
-n_words = 1000
+n_words = 100
 # Epsilon 
 e = 7./3 - 4./3 -1
 # Seed value for random split
@@ -70,30 +70,30 @@ txt = txt.filter(lambda x: (('reviewText' in x) and ('overall' in x) and ('verif
 txt = txt.flatMap(lambda x: ((x[0], (re.findall(re_pattern, x[1]), x[2])),) ).filter(lambda x: len(x[1][0])>0)
 
 #Let's run a word count....
-common_words = txt.flatMap(lambda x: list(map(lambda y: (y,1),  x[1][0])))
+common_words = txt.flatMap(lambda x: tuple(map(lambda y: (y,1),  x[1][0])))
 common_words = common_words.reduceByKey(lambda a, b: a+b)
-common_words = sc.broadcast(list(map(lambda y: y[0], common_words.takeOrdered(n_words, lambda x: -x[1]))))
+common_words = sc.broadcast(tuple(map(lambda y: y[0], common_words.takeOrdered(n_words, lambda x: -x[1]))))
 
 #Format: (word, (rating, relFreq, VERIFIED))
-txt = txt.flatMap(lambda x: [(i, (x[0], x[1][0].count(i)/len(set(x[1][0])), x[1][1])) for i in common_words.value])
+txt = txt.flatMap(lambda x: tuple([(i, (x[0], x[1][0].count(i)/len(set(x[1][0])), x[1][1])) for i in common_words.value]))
 #Format: (word, [(ratings, relFreq, VERIFIED) ...])
 txt = txt.groupByKey().map(lambda x: (x[0], list(x[1])))
 txt = txt.map(doTest)
 
-without_controls = txt.sortBy(lambda x: (x[1][0], x[1][2]))
-with_controls = txt.sortBy(lambda x: (x[1][1], x[1][2]))
+#without_controls = txt.takeOrdered(20, lambda x: (x[1][0], x[1][2]))
+#with_controls = txt.takeOrdered(20, lambda x: (x[1][1], x[1][2]))
 
 pprint ('Without Controls: +ve')
-pprint (without_controls.filter(lambda x: x[1][2]>0).take(10))
+pprint (txt.filter(lambda x: x[1][2]>0).takeOrdered(20, lambda x: (x[1][0], -x[1][2])))
 pprint ('----------------------')
 pprint ('Without Controls: -ve')
-pprint (without_controls.filter(lambda x: x[1][2]<0).collect()[-10:])
+pprint (txt.filter(lambda x: x[1][2]<0).takeOrdered(20, lambda x: (x[1][0], x[1][2])))
 pprint ('----------------------')
 pprint ('----------------------')
 pprint ('With Controls: +ve')
-pprint (with_controls.filter(lambda x: x[1][2]>0).take(10))
+pprint (txt.filter(lambda x: x[1][2]>0).takeOrdered(20, lambda x: (x[1][0], -x[1][2])))
 pprint ('----------------------')
 pprint ('With Controls: -ve')
-pprint (with_controls.filter(lambda x: x[1][2]<0).collect()[-10:])
+pprint (txt.filter(lambda x: x[1][2]<0).takeOrdered(20, lambda x: (x[1][0], x[1][2])))
 
 sc.stop()
