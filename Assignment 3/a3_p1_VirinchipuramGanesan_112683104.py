@@ -15,7 +15,7 @@ from pprint import pprint
 # Regex match for pattern
 re_pattern =  r'((?:[\.,!?;"])|(?:(?:\#|\@)?[A-Za-z0-9_\-]+(?:\'[a-z]{1,3})?))'
 # Top n common words
-n_words = 100
+n_words = 1000
 # Epsilon 
 e = 7./3 - 4./3 -1
 # Seed value for random split
